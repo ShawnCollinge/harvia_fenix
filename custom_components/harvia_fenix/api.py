@@ -516,6 +516,14 @@ class HarviaSaunaAPI:
             "active_profile": st.get("activeProfile"),
             "sauna_status": st.get("saunaStatus"),
 
+            # Capability flags: a function exists when the device shadow exposes
+            # its object. Telemetry (e.g. steamOn) is NOT reliable here — it is
+            # reported as 0 even on units without a steamer.
+            "has_heater": "heater" in st,
+            "has_light": "light" in st,
+            "has_fan": "fan" in st,
+            "has_steamer": "steamer" in st,
+
             "profiles": norm_profiles,
         }
 

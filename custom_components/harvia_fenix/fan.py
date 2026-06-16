@@ -70,7 +70,9 @@ class HarviaFan(CoordinatorEntity[HarviaDataCoordinator], FanEntity):
     """Sauna ventilation fan (on/off only). State follows latest-data['fanOn']."""
 
     _attr_icon = "mdi:fan"
-    _attr_supported_features = FanEntityFeature(0)
+    # On/off only. TURN_ON/TURN_OFF must be declared explicitly (HA 2024.8+),
+    # otherwise the fan.turn_on / fan.turn_off actions are rejected.
+    _attr_supported_features = FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
 
     def __init__(
         self,

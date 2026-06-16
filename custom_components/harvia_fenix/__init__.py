@@ -21,7 +21,7 @@ CONFIG_SCHEMA = cv.empty_config_schema("harvia_fenix")
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[str] = ["sensor", "binary_sensor", "switch"]
+PLATFORMS: list[str] = ["sensor", "binary_sensor", "switch", "light", "fan"]
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

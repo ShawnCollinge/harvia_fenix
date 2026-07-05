@@ -34,7 +34,9 @@
         "title": "Harvia Fenix Options",
         "data": {
           "data_poll_interval": "Data poll interval",
-          "device_poll_interval": "Device poll interval"
+          "device_poll_interval": "Device poll interval",
+          "optimistic": "Optimistic switches (instant on/off, reconciled after)",
+          "forced_refresh_delays": "Forced refresh delays (seconds)"
         }
       }
     }

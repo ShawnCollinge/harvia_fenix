@@ -6,7 +6,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .api import HarviaSaunaAPI
-from .constants import DOMAIN, CONF_ENDPOINTS_URL, DEFAULT_ENDPOINTS_URL
+from .constants import (
+    DOMAIN,
+    CONF_ENDPOINTS_URL,
+    DEFAULT_ENDPOINTS_URL,
+    CONF_OPTIMISTIC,
+    DEFAULT_OPTIMISTIC,
+    CONF_FORCED_REFRESH_DELAYS,
+    DEFAULT_FORCED_REFRESH_DELAYS,
+    OPTIMISTIC_TIMEOUT_MARGIN,
+    parse_forced_delays,
+)
 
 from .coordinator import HarviaDeviceCoordinator, HarviaDataCoordinator
 from .constants import DEVICE_COORDINATOR, DATA_COORDINATOR
@@ -39,11 +49,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     device_coordinator = HarviaDeviceCoordinator(hass, entry, api)
     data_coordinator = HarviaDataCoordinator(hass, entry, api, device_coordinator)
 
+    optimistic = bool(entry.options.get(CONF_OPTIMISTIC, DEFAULT_OPTIMISTIC))
+    forced_delays = parse_forced_delays(
+        entry.options.get(CONF_FORCED_REFRESH_DELAYS, DEFAULT_FORCED_REFRESH_DELAYS)
+    )
+    optimistic_timeout = float(max(forced_delays) + OPTIMISTIC_TIMEOUT_MARGIN)
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         DEVICE_COORDINATOR: device_coordinator,
         DATA_COORDINATOR: data_coordinator,
+        "optimistic": optimistic,
+        "forced_delays": forced_delays,
+        "optimistic_timeout": optimistic_timeout,
     }
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))

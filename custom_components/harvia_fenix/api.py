@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -55,6 +56,9 @@ class HarviaSaunaAPI:
         self._rest_generics_base: str | None = None
         self._rest_device_base: str | None = None
         self._rest_data_base: str | None = None  # NEW
+        # AppSync GraphQL "device" endpoint. Used for shadow writes (e.g. the
+        # target-temperature setpoint) that the REST command endpoint can't do.
+        self._graphql_device_base: str | None = None
 
         self._auth_lock = asyncio.Lock()
         self._expiry_skew = 60  # refresh 60s before expiry
@@ -119,20 +123,26 @@ class HarviaSaunaAPI:
             rest_device = rest_api["device"]["https"]
 
             rest_data = rest_api.get("data", {}).get("https")
+
+            graphql_device = (
+                data["endpoints"].get("GraphQL", {}).get("device", {}).get("https")
+            )
         except Exception as err:
             raise RuntimeError(f"Endpoints parsing failed: {data}") from err
 
         self._rest_generics_base = str(rest_generic).rstrip("/")
         self._rest_device_base = str(rest_device).rstrip("/")
         self._rest_data_base = str(rest_data).rstrip("/") if rest_data else None
+        self._graphql_device_base = str(graphql_device) if graphql_device else None
 
         self._endpoints_loaded = True
 
         _LOGGER.info(
-            "Harvia endpoints resolved: generics=%s device=%s data=%s",
+            "Harvia endpoints resolved: generics=%s device=%s data=%s graphql_device=%s",
             self._rest_generics_base,
             self._rest_device_base,
             self._rest_data_base,
+            self._graphql_device_base,
         )
 
     # -----------------------------
@@ -516,6 +526,10 @@ class HarviaSaunaAPI:
             "active_profile": st.get("activeProfile"),
             "sauna_status": st.get("saunaStatus"),
 
+            # Capability flag: the heater function exists when the device shadow
+            # exposes its object. Used to gate the climate entity.
+            "has_heater": "heater" in st,
+
             "profiles": norm_profiles,
         }
 
@@ -608,7 +622,124 @@ class HarviaSaunaAPI:
 
         return resp
 
+    # -----------------------------
+    # GraphQL (AppSync) — shadow writes
+    # -----------------------------
 
+    async def async_graphql(
+        self,
+        query: str,
+        variables: dict[str, Any] | None = None,
+        operation_name: str | None = None,
+    ) -> Any:
+        """POST a GraphQL operation to the AppSync device endpoint.
+
+        Authenticates with the same Cognito idToken as REST, but sent as a
+        Bearer token (AppSync rejects the bare token). Refreshes + retries once
+        on auth failure, mirroring rest_call().
+        """
+        await self.async_init()
+        assert self._session is not None
+
+        if not self._graphql_device_base:
+            raise RuntimeError(
+                "Harvia GraphQL device endpoint not initialized "
+                "(missing endpoints.GraphQL.device.https)"
+            )
+
+        body: dict[str, Any] = {"query": query}
+        if variables is not None:
+            body["variables"] = variables
+        if operation_name:
+            body["operationName"] = operation_name
+
+        for attempt in range(2):
+            await self._ensure_valid_token(force=(attempt == 1))
+
+            headers = {
+                "Authorization": f"Bearer {self._tokens.id_token}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+            _LOGGER.debug("Harvia GQL REQ %s body=%s", self._graphql_device_base, body)
+
+            async with self._session.post(
+                self._graphql_device_base,
+                json=body,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                text = await resp.text()
+                _LOGGER.debug("Harvia GQL RESP %s body=%s", resp.status, text)
+
+                if resp.status in (401, 403) and attempt == 0:
+                    continue
+                if resp.status in (401, 403):
+                    raise HarviaAuthError(f"Unauthorized ({resp.status}) for GraphQL: {text}")
+                if resp.status >= 400:
+                    raise RuntimeError(f"GraphQL failed {resp.status}: {text}")
+
+                data = json.loads(text) if text else {}
+
+            # AppSync returns HTTP 200 with an "errors" array for GraphQL-level
+            # failures (including UnauthorizedException on expired tokens).
+            errors = data.get("errors") if isinstance(data, dict) else None
+            if errors:
+                is_auth = any(
+                    "Unauthorized" in str(e.get("errorType", "")) for e in errors
+                )
+                if is_auth and attempt == 0:
+                    continue
+                if is_auth:
+                    raise HarviaAuthError(f"GraphQL unauthorized: {errors}")
+                raise RuntimeError(f"GraphQL errors: {errors}")
+
+            return data
+
+        raise HarviaAuthError("Unauthorized after retry for GraphQL")
+
+    # GraphQL mutation used by the MyHarvia app to write device-shadow state
+    # (target temperature, humidity, active profile, ...).
+    _DEVICES_STATES_UPDATE = (
+        "mutation devicesStatesUpdate("
+        "$deviceId: ID!, $state: AWSJSON!, $shadowName: String, $clientToken: String) "
+        "{ devicesStatesUpdate("
+        "deviceId: $deviceId, state: $state, shadowName: $shadowName, clientToken: $clientToken) }"
+    )
+
+    async def async_update_device_state(
+        self,
+        device_id: str,
+        state: dict[str, Any],
+        shadow_name: str = "C1",
+    ) -> Any:
+        """Merge `state` into the device shadow via devicesStatesUpdate.
+
+        The shadow deep-merges, so a partial state (just the fields to change)
+        is sufficient. `state` is sent as an AWSJSON string.
+        """
+        variables = {
+            "deviceId": device_id,
+            "state": json.dumps(state),
+            "shadowName": shadow_name,
+            "clientToken": str(uuid.uuid4()),
+        }
+        return await self.async_graphql(
+            self._DEVICES_STATES_UPDATE,
+            variables,
+            operation_name="devicesStatesUpdate",
+        )
+
+    async def async_set_target_temp(
+        self,
+        device_id: str,
+        temp: int,
+        active_profile: Any,
+        shadow_name: str = "C1",
+    ) -> Any:
+        """Set the target temperature on the device's active profile."""
+        state = {"profiles": {str(active_profile): {"targetTemp": int(temp)}}}
+        return await self.async_update_device_state(device_id, state, shadow_name)
 
     @property
     def rest_data_base(self) -> str | None:

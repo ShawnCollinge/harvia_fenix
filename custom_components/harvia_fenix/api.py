@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 import logging
 import time
 from dataclasses import dataclass
@@ -636,6 +637,34 @@ class HarviaSaunaAPI:
         return await self.async_graphql(
             self._DEVICES_COMMANDS_SEND, variables, operation_name="devicesCommandsSend"
         )
+
+    _DEVICES_STATES_UPDATE = (
+        "mutation devicesStatesUpdate("
+        "$deviceId: ID!, $state: AWSJSON!, $shadowName: String, $clientToken: String) "
+        "{ devicesStatesUpdate("
+        "deviceId: $deviceId, state: $state, shadowName: $shadowName, clientToken: $clientToken) }"
+    )
+
+    async def async_update_device_state(
+        self, device_id: str, state: dict[str, Any], shadow_name: str = "C1",
+    ) -> Any:
+        """Merge `state` into the device shadow via devicesStatesUpdate (deep-merge)."""
+        variables = {
+            "deviceId": device_id,
+            "state": json.dumps(state),
+            "shadowName": shadow_name,
+            "clientToken": str(uuid.uuid4()),
+        }
+        return await self.async_graphql(
+            self._DEVICES_STATES_UPDATE, variables, operation_name="devicesStatesUpdate"
+        )
+
+    async def async_set_target_temp(
+        self, device_id: str, temp: int, active_profile: Any, shadow_name: str = "C1",
+    ) -> Any:
+        """Set the target temperature on the device's active profile."""
+        state = {"profiles": {str(active_profile): {"targetTemp": int(temp)}}}
+        return await self.async_update_device_state(device_id, state, shadow_name)
 
     async def async_valid_id_token(self) -> str:
         """Ensure a fresh token and return it (for the websocket handshake)."""

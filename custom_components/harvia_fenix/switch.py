@@ -20,13 +20,11 @@ class HarviaSaunaSwitch(HarviaOnOffEntity, SwitchEntity):
         self._attr_unique_id = f"{device.id}_switch_sauna"
         self._attr_name = f"Harvia {device.type} Sauna"
 
-    def _read_state(self) -> Optional[bool]:
-        state = (self.coordinator.data or {}).get("states", {}).get(self._device.id)
-        if not isinstance(state, dict):
-            return None
+    @property
+    def is_on(self) -> Optional[bool]:
         # Harvia sauna_status: 1 = ON; 0/2/3 = OFF.
         try:
-            iv = int(state.get("sauna_status"))
+            iv = int(self._state().get("sauna_status"))
         except (TypeError, ValueError):
             return None
         if iv == 1:

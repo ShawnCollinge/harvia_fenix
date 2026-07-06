@@ -65,6 +65,11 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Refresh now, bypassing the poll-interval throttle."""
         self.async_set_updated_data(await self._async_update_data(force=True))
 
+    def apply_pushed_state(self, device_id: str, normalized: dict[str, Any]) -> None:
+        """Merge a websocket-pushed device state and notify entities immediately."""
+        self._states[device_id] = normalized
+        self.async_set_updated_data({"devices": self._devices, "states": self._states})
+
     async def _async_update_data(self, force: bool = False) -> dict[str, Any]:
         now = time.monotonic()
 

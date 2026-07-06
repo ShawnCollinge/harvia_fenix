@@ -34,9 +34,7 @@
         "title": "Harvia Fenix Optionen",
         "data": {
           "data_poll_interval": "Daten-Aktualisierungsintervall",
-          "device_poll_interval": "Geräte-Aktualisierungsintervall",
-          "optimistic": "Optimistische Schalter (sofort ein/aus, danach abgeglichen)",
-          "forced_refresh_delays": "Verzögerungen für erzwungene Aktualisierung (Sekunden)"
+          "device_poll_interval": "Geräte-Aktualisierungsintervall"
         }
       }
     }

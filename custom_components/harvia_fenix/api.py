@@ -55,6 +55,12 @@ class HarviaSaunaAPI:
         self._rest_generics_base: str | None = None
         self._rest_device_base: str | None = None
         self._rest_data_base: str | None = None  # NEW
+        # AppSync GraphQL "device" endpoint: https for commands, wss for the
+        # realtime state subscription. host is the appsync-api host used in the
+        # websocket auth handshake.
+        self._graphql_device_base: str | None = None
+        self._graphql_device_wss: str | None = None
+        self._graphql_device_host: str | None = None
 
         self._auth_lock = asyncio.Lock()
         self._expiry_skew = 60  # refresh 60s before expiry
@@ -119,20 +125,31 @@ class HarviaSaunaAPI:
             rest_device = rest_api["device"]["https"]
 
             rest_data = rest_api.get("data", {}).get("https")
+
+            gql_device = data["endpoints"].get("GraphQL", {}).get("device", {})
+            graphql_https = gql_device.get("https")
+            graphql_wss = gql_device.get("wss")
         except Exception as err:
             raise RuntimeError(f"Endpoints parsing failed: {data}") from err
 
         self._rest_generics_base = str(rest_generic).rstrip("/")
         self._rest_device_base = str(rest_device).rstrip("/")
         self._rest_data_base = str(rest_data).rstrip("/") if rest_data else None
+        self._graphql_device_base = str(graphql_https) if graphql_https else None
+        self._graphql_device_wss = str(graphql_wss) if graphql_wss else None
+        self._graphql_device_host = (
+            self._graphql_device_base.replace("https://", "").replace("/graphql", "")
+            if self._graphql_device_base else None
+        )
 
         self._endpoints_loaded = True
 
         _LOGGER.info(
-            "Harvia endpoints resolved: generics=%s device=%s data=%s",
+            "Harvia endpoints resolved: generics=%s device=%s data=%s graphql=%s",
             self._rest_generics_base,
             self._rest_device_base,
             self._rest_data_base,
+            self._graphql_device_base,
         )
 
     # -----------------------------
@@ -436,6 +453,7 @@ class HarviaSaunaAPI:
         heater = st.get("heater") or {}
         steamer = st.get("steamer") or {}
         light = st.get("light") or {}
+        fan = st.get("fan") or {}
 
         active_profile = st.get("activeProfile")
         raw_profiles = st.get("profiles") or {}
@@ -498,6 +516,9 @@ class HarviaSaunaAPI:
             "steamer_state": steamer.get("state"),
 
             "light_on_raw": profile_light_on if profile_light_on is not None else light.get("on"),
+            # Actual current on/off from the device shadow (what the ws feed pushes).
+            "light_on": light.get("on"),
+            "fan_on": fan.get("on"),
 
             "screen_lock_on": screen_lock.get("on"),
 
@@ -608,7 +629,96 @@ class HarviaSaunaAPI:
 
         return resp
 
+    # -----------------------------
+    # GraphQL (AppSync) — commands + realtime auth
+    # -----------------------------
 
+    async def async_graphql(
+        self,
+        query: str,
+        variables: dict[str, Any] | None = None,
+        operation_name: str | None = None,
+    ) -> Any:
+        """POST a GraphQL op to the AppSync device endpoint (Bearer idToken)."""
+        await self.async_init()
+        assert self._session is not None
+        if not self._graphql_device_base:
+            raise RuntimeError("Harvia GraphQL device endpoint not initialized")
+
+        body: dict[str, Any] = {"query": query}
+        if variables is not None:
+            body["variables"] = variables
+        if operation_name:
+            body["operationName"] = operation_name
+
+        for attempt in range(2):
+            await self._ensure_valid_token(force=(attempt == 1))
+            headers = {
+                "Authorization": f"Bearer {self._tokens.id_token}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+            async with self._session.post(
+                self._graphql_device_base, json=body, headers=headers,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                text = await resp.text()
+                if resp.status in (401, 403) and attempt == 0:
+                    continue
+                if resp.status in (401, 403):
+                    raise HarviaAuthError(f"Unauthorized ({resp.status}) for GraphQL: {text}")
+                if resp.status >= 400:
+                    raise RuntimeError(f"GraphQL failed {resp.status}: {text}")
+                data = json.loads(text) if text else {}
+
+            errors = data.get("errors") if isinstance(data, dict) else None
+            if errors:
+                if any("Unauthorized" in str(e.get("errorType", "")) for e in errors) and attempt == 0:
+                    continue
+                raise RuntimeError(f"GraphQL errors: {errors}")
+            return data
+
+        raise HarviaAuthError("Unauthorized after retry for GraphQL")
+
+    _DEVICES_COMMANDS_SEND = (
+        "mutation devicesCommandsSend("
+        "$deviceId: ID!, $command: Command!, $subId: String, $params: AWSJSON) "
+        "{ devicesCommandsSend("
+        "deviceId: $deviceId, command: $command, subId: $subId, params: $params) "
+        "{ response failureReason } }"
+    )
+
+    async def async_send_command(
+        self, device_id: str, command_type: str, on: bool, sub_id: str = "C1",
+    ) -> Any:
+        """Send an on/off command (SAUNA / LIGHTS / FAN) via devicesCommandsSend."""
+        variables = {
+            "deviceId": device_id,
+            "command": {"type": command_type},
+            "subId": sub_id,
+            "params": json.dumps({"on": 1 if on else 0}),
+        }
+        return await self.async_graphql(
+            self._DEVICES_COMMANDS_SEND, variables, operation_name="devicesCommandsSend"
+        )
+
+    async def async_valid_id_token(self) -> str:
+        """Ensure a fresh token and return it (for the websocket handshake)."""
+        await self._ensure_valid_token()
+        assert self._tokens.id_token is not None
+        return self._tokens.id_token
+
+    def normalize_reported(self, reported: dict[str, Any]) -> dict[str, Any]:
+        """Normalize a websocket 'reported' shadow the same way as REST state."""
+        return self._extract_state({"state": reported})
+
+    @property
+    def graphql_device_wss(self) -> str | None:
+        return self._graphql_device_wss
+
+    @property
+    def graphql_device_host(self) -> str | None:
+        return self._graphql_device_host
 
     @property
     def rest_data_base(self) -> str | None:

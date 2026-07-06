@@ -8,7 +8,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import selector
 
 from .api import HarviaSaunaAPI, HarviaAuthError
 from .constants import (
@@ -20,12 +19,6 @@ from .constants import (
     POLL_INTERVAL_OPTIONS,
     DEFAULT_DATA_POLL_LABEL,
     DEFAULT_DEVICE_POLL_LABEL,
-    CONF_OPTIMISTIC,
-    DEFAULT_OPTIMISTIC,
-    CONF_FORCED_REFRESH_DELAYS,
-    DEFAULT_FORCED_REFRESH_DELAYS,
-    FORCED_REFRESH_DELAY_OPTIONS,
-    parse_forced_delays,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -140,11 +133,6 @@ class HarviaOptionsFlowHandler(config_entries.OptionsFlow):
         # store labels like "30s"
         data_default = self._config_entry.options.get(CONF_DATA_POLL_INTERVAL, DEFAULT_DATA_POLL_LABEL)
         device_default = self._config_entry.options.get(CONF_DEVICE_POLL_INTERVAL, DEFAULT_DEVICE_POLL_LABEL)
-        optimistic_default = self._config_entry.options.get(CONF_OPTIMISTIC, DEFAULT_OPTIMISTIC)
-        # Normalize any saved value (list, or an old comma string) to a list of strings.
-        raw_delays = self._config_entry.options.get(CONF_FORCED_REFRESH_DELAYS, DEFAULT_FORCED_REFRESH_DELAYS)
-        delays_default = [str(d) for d in parse_forced_delays(raw_delays)]
-
         # Simple dropdown via vol.In (most compatible; avoids 400)
         labels = list(POLL_INTERVAL_OPTIONS.keys())
 
@@ -152,14 +140,6 @@ class HarviaOptionsFlowHandler(config_entries.OptionsFlow):
             {
                 vol.Required(CONF_DATA_POLL_INTERVAL, default=data_default): vol.In(labels),
                 vol.Required(CONF_DEVICE_POLL_INTERVAL, default=device_default): vol.In(labels),
-                vol.Required(CONF_OPTIMISTIC, default=optimistic_default): bool,
-                vol.Required(CONF_FORCED_REFRESH_DELAYS, default=delays_default): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=FORCED_REFRESH_DELAY_OPTIONS,
-                        multiple=True,
-                        mode=selector.SelectSelectorMode.LIST,
-                    )
-                ),
             }
         )
 

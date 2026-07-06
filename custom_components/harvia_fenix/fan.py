@@ -13,7 +13,7 @@ class HarviaFan(HarviaOnOffEntity, FanEntity):
     """Sauna ventilation fan (on/off). State follows latest-data['fanOn']."""
 
     _command = "FAN"
-    _data_key = "fanOn"
+    _state_key = "fan_on"
     _attr_icon = "mdi:fan"
     _attr_supported_features = FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
 

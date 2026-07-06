@@ -13,7 +13,7 @@ class HarviaLight(HarviaOnOffEntity, LightEntity):
     """Sauna cabin light (on/off). State follows latest-data['lightOn']."""
 
     _command = "LIGHTS"
-    _data_key = "lightOn"
+    _state_key = "light_on"
     _attr_icon = "mdi:lightbulb"
     _attr_color_mode = ColorMode.ONOFF
     _attr_supported_color_modes = {ColorMode.ONOFF}

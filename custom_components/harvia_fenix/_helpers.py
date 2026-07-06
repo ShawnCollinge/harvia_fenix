@@ -22,6 +22,19 @@ def latest_data(coordinator, device_id: str) -> dict[str, Any] | None:
     return d if isinstance(d, dict) else None
 
 
+def data_attributes(coordinator, device_id: str) -> dict[str, Any] | None:
+    """Common extra_state_attributes from the latest-data payload."""
+    payload = latest_payload(coordinator, device_id)
+    if not isinstance(payload, dict):
+        return None
+    return {
+        "timestamp": payload.get("timestamp"),
+        "shadowName": payload.get("shadowName"),
+        "subId": payload.get("subId"),
+        "type": payload.get("type"),
+    }
+
+
 # Superset of the on/off-ish strings the platforms need. Numeric/bool values are
 # handled directly; strings cover both plain on/off and sauna-status wording.
 _TRUE_STRINGS = {"1", "true", "on", "running", "active", "heating", "started", "start"}

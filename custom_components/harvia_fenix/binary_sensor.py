@@ -16,20 +16,7 @@ from .api import HarviaDevice
 
 
 from .device_info import build_device_info
-
-
-def _get_latest_payload(coordinator: HarviaDataCoordinator, device_id: str) -> dict[str, Any] | None:
-    latest_map = coordinator.data.get("latest_data", {}) if coordinator.data else {}
-    payload = latest_map.get(device_id)
-    return payload if isinstance(payload, dict) else None
-
-
-def _get_latest_data_dict(coordinator: HarviaDataCoordinator, device_id: str) -> dict[str, Any] | None:
-    payload = _get_latest_payload(coordinator, device_id)
-    if not isinstance(payload, dict):
-        return None
-    d = payload.get("data")
-    return d if isinstance(d, dict) else None
+from ._helpers import latest_data, coerce_bool, data_attributes
 
 
 @dataclass(frozen=True)
@@ -93,33 +80,11 @@ class HarviaLatestDataBinarySensor(CoordinatorEntity[HarviaDataCoordinator], Bin
 
     @property
     def is_on(self) -> Optional[bool]:
-        data_dict = _get_latest_data_dict(self.coordinator, self._device.id)
+        data_dict = latest_data(self.coordinator, self._device.id)
         if not isinstance(data_dict, dict):
             return None
-
-        val = data_dict.get(self._spec.data_key)
-
-        # Treat 1/0, True/False, "1"/"0" as boolean
-        if isinstance(val, bool):
-            return val
-        if isinstance(val, (int, float)):
-            return bool(int(val))
-        if isinstance(val, str):
-            if val.strip() in ("1", "true", "True", "on", "ON"):
-                return True
-            if val.strip() in ("0", "false", "False", "off", "OFF"):
-                return False
-
-        return None
+        return coerce_bool(data_dict.get(self._spec.data_key))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        payload = _get_latest_payload(self.coordinator, self._device.id)
-        if not isinstance(payload, dict):
-            return None
-        return {
-            "timestamp": payload.get("timestamp"),
-            "shadowName": payload.get("shadowName"),
-            "subId": payload.get("subId"),
-            "type": payload.get("type"),
-        }
+        return data_attributes(self.coordinator, self._device.id)

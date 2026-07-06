@@ -22,6 +22,7 @@ from .api import HarviaDevice
 
 
 from .device_info import build_device_info
+from ._helpers import latest_data, data_attributes
 
 # ---------------------------
 # Helpers
@@ -29,20 +30,6 @@ from .device_info import build_device_info
 
 def _get(state: dict[str, Any], key: str) -> Any:
     return state.get(key) if isinstance(state, dict) else None
-
-
-def _get_latest_payload(coordinator: HarviaDataCoordinator, device_id: str) -> dict[str, Any] | None:
-    latest_map = coordinator.data.get("latest_data", {}) if coordinator.data else {}
-    payload = latest_map.get(device_id)
-    return payload if isinstance(payload, dict) else None
-
-
-def _get_latest_data_dict(coordinator: HarviaDataCoordinator, device_id: str) -> dict[str, Any] | None:
-    payload = _get_latest_payload(coordinator, device_id)
-    if not isinstance(payload, dict):
-        return None
-    d = payload.get("data")
-    return d if isinstance(d, dict) else None
 
 
 # ---------------------------
@@ -228,19 +215,11 @@ class HarviaLatestDataSensor(CoordinatorEntity[HarviaDataCoordinator], SensorEnt
 
     @property
     def native_value(self) -> Any:
-        data_dict = _get_latest_data_dict(self.coordinator, self._device.id)
+        data_dict = latest_data(self.coordinator, self._device.id)
         if not isinstance(data_dict, dict):
             return None
         return data_dict.get(self._spec.data_key)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        payload = _get_latest_payload(self.coordinator, self._device.id)
-        if not isinstance(payload, dict):
-            return None
-        return {
-            "timestamp": payload.get("timestamp"),
-            "shadowName": payload.get("shadowName"),
-            "subId": payload.get("subId"),
-            "type": payload.get("type"),
-        }
+        return data_attributes(self.coordinator, self._device.id)

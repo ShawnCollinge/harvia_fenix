@@ -61,20 +61,16 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._device_interval,
         )
 
-    async def async_force_refresh(self) -> None:
-        """Refresh now, bypassing the poll-interval throttle."""
-        self.async_set_updated_data(await self._async_update_data(force=True))
-
     def apply_pushed_state(self, device_id: str, normalized: dict[str, Any]) -> None:
         """Merge a websocket-pushed device state and notify entities immediately."""
         self._states[device_id] = normalized
         self.async_set_updated_data({"devices": self._devices, "states": self._states})
 
-    async def _async_update_data(self, force: bool = False) -> dict[str, Any]:
+    async def _async_update_data(self) -> dict[str, Any]:
         now = time.monotonic()
 
         try:
-            if force or (not self._devices) or (now - self._last_device_refresh) >= self._device_interval:
+            if (not self._devices) or (now - self._last_device_refresh) >= self._device_interval:
                 _LOGGER.debug("Harvia: refreshing devices/state (interval=%ss)", self._device_interval)
                 self._devices = await self.api.get_devices()
                 for dev in self._devices:
@@ -128,15 +124,11 @@ class HarviaDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._data_interval,
         )
 
-    async def async_force_refresh(self) -> None:
-        """Refresh now, bypassing the poll-interval throttle."""
-        self.async_set_updated_data(await self._async_update_data(force=True))
-
-    async def _async_update_data(self, force: bool = False) -> dict[str, Any]:
+    async def _async_update_data(self) -> dict[str, Any]:
         now = time.monotonic()
 
         try:
-            if force or (now - self._last_data_refresh) >= self._data_interval:
+            if (now - self._last_data_refresh) >= self._data_interval:
                 _LOGGER.debug("Harvia: refreshing latest-data (interval=%ss)", self._data_interval)
 
                 devices: list[Any] = self._device_coordinator.data.get("devices", []) if self._device_coordinator.data else []

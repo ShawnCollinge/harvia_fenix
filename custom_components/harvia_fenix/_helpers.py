@@ -1,10 +1,8 @@
-"""Shared helpers for the Harvia platforms: reading the latest-data payload,
-coercing on/off-ish values, building the common extra-state-attributes block,
-and the post-command coordinator refresh nudge.
+"""Shared helpers for the Harvia platforms: reading the latest-data telemetry
+payload and coercing on/off-ish values.
 """
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Optional
 
 
@@ -43,33 +41,3 @@ def coerce_bool(val: Any) -> Optional[bool]:
         if s in _FALSE_STRINGS:
             return False
     return None
-
-
-def data_attributes(coordinator, device_id: str) -> dict[str, Any] | None:
-    """Common extra_state_attributes: timestamp / shadowName / subId / type."""
-    payload = latest_payload(coordinator, device_id)
-    if not isinstance(payload, dict):
-        return None
-    return {
-        "timestamp": payload.get("timestamp"),
-        "shadowName": payload.get("shadowName"),
-        "subId": payload.get("subId"),
-        "type": payload.get("type"),
-    }
-
-
-async def nudge_refresh(*coordinators, delays: tuple[int, ...] = (3, 6)) -> None:
-    """Refresh all given coordinators immediately, then again after each delay.
-
-    The Harvia cloud is eventually consistent after a command, so we poll a few
-    times to let the UI catch up. Passing the coordinators lets each platform
-    refresh whichever pair it depends on.
-    """
-    async def _refresh_all() -> None:
-        for coordinator in coordinators:
-            await coordinator.async_request_refresh()
-
-    await _refresh_all()
-    for delay in delays:
-        await asyncio.sleep(delay)
-        await _refresh_all()

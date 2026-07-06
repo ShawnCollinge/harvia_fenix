@@ -5,7 +5,8 @@ import time
 from datetime import timedelta
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryAuthFailed
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 

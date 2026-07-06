@@ -12,6 +12,8 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .api import HarviaAuthError
+
 _LOGGER = logging.getLogger(__name__)
 
 # AppSync realtime subscription the MyHarvia app uses: pushes the full device
@@ -66,6 +68,12 @@ class HarviaWebsocket:
                 await self._connect_once()
             except asyncio.CancelledError:
                 raise
+            except HarviaAuthError as err:
+                # Don't hammer the login endpoint on bad credentials; the device
+                # coordinator escalates reauth, which reloads the entry and
+                # restarts this task.
+                _LOGGER.error("Harvia websocket auth failed; stopping: %s", err)
+                return
             except Exception as err:  # noqa: BLE001 - keep the loop alive
                 _LOGGER.warning("Harvia websocket error: %s", err)
             if self._closing:

@@ -53,7 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await data_coordinator.async_config_entry_first_refresh()
 
     # Realtime device state via websocket; the slow poll remains as a fallback.
-    websocket = HarviaWebsocket(hass, api, device_coordinator)
+    websocket = HarviaWebsocket(hass, entry.entry_id, api, device_coordinator)
     websocket.start()
     hass.data[DOMAIN][entry.entry_id]["websocket"] = websocket
 

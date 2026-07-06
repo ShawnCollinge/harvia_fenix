@@ -708,9 +708,11 @@ class HarviaSaunaAPI:
         assert self._tokens.id_token is not None
         return self._tokens.id_token
 
-    def normalize_reported(self, reported: dict[str, Any]) -> dict[str, Any]:
+    def normalize_reported(
+        self, reported: dict[str, Any], connection: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Normalize a websocket 'reported' shadow the same way as REST state."""
-        return self._extract_state({"state": reported})
+        return self._extract_state({"state": reported, "connectionState": connection or {}})
 
     @property
     def graphql_device_wss(self) -> str | None:

@@ -17,7 +17,6 @@
       }
     },
     "error": {
-      "auth": "Authentication failed",
       "invalid_auth": "Authentication failed",
       "no_devices": "No devices found in your Harvia account",
       "unknown": "Unknown error"

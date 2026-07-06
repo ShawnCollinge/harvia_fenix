@@ -18,7 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
-    """Base for Harvia on/off entities (sauna switch, fan, light).
+    """Base for Harvia on/off entities.
 
     State comes from the device coordinator, which is fed in real time by the
     websocket feed (with the slow poll as a fallback), so there's no optimistic

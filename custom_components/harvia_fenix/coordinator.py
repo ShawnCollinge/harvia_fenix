@@ -31,7 +31,7 @@ def _parse_interval(value: Any, default_label: str) -> int:
     return int(POLL_INTERVAL_OPTIONS[default_label])
 
 
-FIXED_TICK_SECONDS = 30  # Coordinator läuft immer alle 30s
+FIXED_TICK_SECONDS = 30  # coordinator ticks every 30s; the real fetch is throttled below
 
 
 class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -134,7 +134,7 @@ class HarviaDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 devices: list[Any] = self._device_coordinator.data.get("devices", []) if self._device_coordinator.data else []
                 if not devices:
-                    # Falls device coordinator noch nichts hat, einmal anstoßen
+                    # If the device coordinator has no data yet, kick it once
                     await self._device_coordinator.async_request_refresh()
                     devices = self._device_coordinator.data.get("devices", []) if self._device_coordinator.data else []
 

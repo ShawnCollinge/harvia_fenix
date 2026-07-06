@@ -7,7 +7,6 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.exceptions import HomeAssistantError
 
 from .api import HarviaSaunaAPI, HarviaAuthError
 from .constants import (
@@ -71,7 +70,7 @@ class HarviaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     async def async_step_reauth(self, user_input: dict[str, Any] | None = None):
-        # entry_id kommt von HA über context, nicht user_input
+        # entry_id comes from HA via context, not user_input
         entry_id = self.context.get("entry_id")
         if not entry_id:
            return self.async_abort(reason="unknown")
@@ -145,8 +144,3 @@ class HarviaOptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(step_id="init", data_schema=schema)
 
-
-class CannotConnect(HomeAssistantError):
-    def __init__(self, reason: str = "cannot_connect") -> None:
-        self.reason = reason
-        super().__init__(reason)

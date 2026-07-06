@@ -20,8 +20,6 @@ from .constants import DOMAIN, DEVICE_COORDINATOR, DATA_COORDINATOR
 from .coordinator import HarviaDeviceCoordinator, HarviaDataCoordinator
 from .api import HarviaDevice
 
-import inspect
-from homeassistant.helpers import device_registry as dr
 
 from .device_info import build_device_info
 

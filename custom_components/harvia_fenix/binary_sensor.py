@@ -14,8 +14,6 @@ from .constants import DOMAIN, DEVICE_COORDINATOR, DATA_COORDINATOR
 from .coordinator import HarviaDeviceCoordinator, HarviaDataCoordinator
 from .api import HarviaDevice
 
-import inspect
-from homeassistant.helpers import device_registry as dr
 
 from .device_info import build_device_info
 
@@ -42,7 +40,7 @@ class HarviaDataBinarySpec:
     disabled_by_default: bool = False
 
 
-# Based on your response keys that are 0/1 or state-ish:
+# Binary sensors for response keys that are 0/1 or state-ish.
 DATA_BINARY_SPECS: list[HarviaDataBinarySpec] = [
     HarviaDataBinarySpec("fanOn", "data_fanOn"),
     HarviaDataBinarySpec("steamOn", "data_steamOn"),

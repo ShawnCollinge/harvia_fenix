@@ -10,7 +10,7 @@ from .entity import HarviaOnOffEntity, make_onoff_setup
 
 
 class HarviaFan(HarviaOnOffEntity, FanEntity):
-    """Sauna ventilation fan (on/off). State follows latest-data['fanOn']."""
+    """Sauna ventilation fan (on/off). State from the device coordinator's fan_on."""
 
     _command = "FAN"
     _state_key = "fan_on"

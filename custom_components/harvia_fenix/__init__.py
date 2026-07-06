@@ -15,7 +15,6 @@ from .harvia_ws import HarviaWebsocket
 from homeassistant.core import ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 
-import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
 
 CONFIG_SCHEMA = cv.empty_config_schema("harvia_fenix")
@@ -89,7 +88,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             if api is None:
                 continue
 
-            # nutzt deine neue API-Methode
             ok = await api.async_revoke_tokens()
             any_called = True
 

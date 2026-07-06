@@ -29,7 +29,7 @@ def build_device_info(device: Any) -> dict[str, Any]:
     panel = _attr_get(device, "panelType")
     power_variant = _attr_get(device, "powerUnitVariant")
 
-    # Modell sauber anreichern (HA-konform!)
+    # Enrich model info (HA-conformant).
     model = device.type
     details: list[str] = []
     if panel:
@@ -40,7 +40,7 @@ def build_device_info(device: Any) -> dict[str, Any]:
         model = f"{model} ({' / '.join(details)})"
 
     info: dict[str, Any] = {
-        "identifiers": {(DOMAIN, device.id)},   # NICHT ändern
+        "identifiers": {(DOMAIN, device.id)},   # Do not change: keys the registry device; changing it orphans it.
         "name": f"Harvia {device.type}",
         "manufacturer": "Harvia",
         "model": model,
@@ -50,10 +50,10 @@ def build_device_info(device: Any) -> dict[str, Any]:
         "sw_version": sw,
     }
 
-    # None / "" entfernen
+    # Drop None / empty values.
     info = {k: v for k, v in info.items() if v not in (None, "")}
 
-    # nur von dieser HA-Version unterstützte Keys behalten
+    # Keep only keys this HA version supports.
     allowed = set(inspect.signature(dr.DeviceRegistry.async_get_or_create).parameters)
     allowed.discard("self")
     info = {k: v for k, v in info.items() if k in allowed}

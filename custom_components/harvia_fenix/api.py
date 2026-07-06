@@ -54,7 +54,7 @@ class HarviaSaunaAPI:
         self._endpoints_loaded = False
         self._rest_generics_base: str | None = None
         self._rest_device_base: str | None = None
-        self._rest_data_base: str | None = None  # NEW
+        self._rest_data_base: str | None = None
         # AppSync GraphQL "device" endpoint: https for commands, wss for the
         # realtime state subscription. host is the appsync-api host used in the
         # websocket auth handshake.
@@ -216,22 +216,22 @@ class HarviaSaunaAPI:
         self._apply_token_payload(data, keep_refresh_if_missing=True)
         _LOGGER.info("Harvia token refresh OK (idToken=%s)", bool(self._tokens.id_token))
         return bool(self._tokens.id_token)
-    
-    
-        
+
+
+
     async def _revoke(self) -> bool:
         assert self._session is not None
         assert self._rest_generics_base is not None
 
         if not self._tokens.refresh_token:
-           _LOGGER.debug("Harvia revoke skipped: no refresh_token")
-           return False
+            _LOGGER.debug("Harvia revoke skipped: no refresh_token")
+            return False
 
         url = f"{self._rest_generics_base}/auth/revoke"
         payload = {
-           "refreshToken": self._tokens.refresh_token,
-           "email": self._username,
-           "username": self._username,
+            "refreshToken": self._tokens.refresh_token,
+            "email": self._username,
+            "username": self._username,
         }
 
         _LOGGER.debug("Harvia AUTH REVOKE POST %s", url)
@@ -244,7 +244,7 @@ class HarviaSaunaAPI:
         ) as resp:
             text = await resp.text()
 
-            # DEBUG: Response komplett (ohne Secrets)
+            # DEBUG: full response (no secrets)
             _LOGGER.debug(
                 "Harvia AUTH REVOKE RESP %s %s content-type=%s body=%s",
                 resp.status,
@@ -260,7 +260,7 @@ class HarviaSaunaAPI:
                 _LOGGER.warning("Harvia revoke failed (%s): %s", resp.status, text)
                 return False
 
-        # Tokens lokal löschen
+        # Clear tokens locally
         self._tokens.id_token = None
         self._tokens.access_token = None
         self._tokens.refresh_token = None
@@ -274,11 +274,11 @@ class HarviaSaunaAPI:
         await self.async_init()
         return await self._revoke()
 
-    
-    
 
-  
-        
+
+
+
+
 
     def _apply_token_payload(self, data: dict[str, Any], *, keep_refresh_if_missing: bool) -> None:
         id_token = data.get("idToken") or data.get("id_token")

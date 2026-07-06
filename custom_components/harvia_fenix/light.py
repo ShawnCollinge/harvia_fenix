@@ -10,7 +10,7 @@ from .entity import HarviaOnOffEntity, make_onoff_setup
 
 
 class HarviaLight(HarviaOnOffEntity, LightEntity):
-    """Sauna cabin light (on/off). State follows latest-data['lightOn']."""
+    """Sauna cabin light (on/off). State from the device coordinator's light_on."""
 
     _command = "LIGHTS"
     _state_key = "light_on"

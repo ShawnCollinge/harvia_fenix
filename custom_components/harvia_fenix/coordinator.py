@@ -66,6 +66,14 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def apply_pushed_state(self, device_id: str, normalized: dict[str, Any]) -> None:
         """Merge a websocket-pushed device state and notify entities immediately."""
+        prev = self._states.get(device_id)
+        if isinstance(prev, dict):
+            # If a push ever arrives as a partial document, absent keys
+            # normalize to None — keep the last known value rather than wipe
+            # every other entity to unknown.
+            normalized = {
+                k: (prev.get(k) if v is None else v) for k, v in normalized.items()
+            }
         self._last_push[device_id] = time.monotonic()
         self._states[device_id] = normalized
         self.async_set_updated_data({"devices": self._devices, "states": self._states})

@@ -4,7 +4,7 @@ import logging
 from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -32,6 +32,7 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
 
     _command: str = ""
     _state_key: str = ""
+    _fallback_unsub: CALLBACK_TYPE | None = None
 
     def __init__(self, hass: HomeAssistant, entry_id: str, device: HarviaDevice) -> None:
         super().__init__(hass.data[DOMAIN][entry_id][DEVICE_COORDINATOR])
@@ -58,14 +59,23 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
         # State normally arrives via the websocket push within a second or two.
         # Follow up with an unthrottled poll (a plain async_request_refresh
         # would hit the interval throttle and re-serve cached state) so a dead
-        # push feed costs seconds, not a full poll interval. Registered via
-        # async_on_remove so an entry unload/reload cancels it.
-        self.async_on_remove(
-            async_call_later(self.hass, _COMMAND_FALLBACK_DELAY, self._poll_after_command)
+        # push feed costs seconds, not a full poll interval. One pending timer
+        # per entity: rapid commands coalesce, and removal cancels it.
+        if self._fallback_unsub:
+            self._fallback_unsub()
+        self._fallback_unsub = async_call_later(
+            self.hass, _COMMAND_FALLBACK_DELAY, self._poll_after_command
         )
 
     async def _poll_after_command(self, _now) -> None:
+        self._fallback_unsub = None
         await self.coordinator.async_force_refresh()
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._fallback_unsub:
+            self._fallback_unsub()
+            self._fallback_unsub = None
+        await super().async_will_remove_from_hass()
 
 
 def make_onoff_setup(entity_cls: type[HarviaOnOffEntity]):

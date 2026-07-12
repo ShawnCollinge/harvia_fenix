@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .constants import DOMAIN, DEVICE_COORDINATOR
@@ -35,7 +35,6 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
 
     def __init__(self, hass: HomeAssistant, entry_id: str, device: HarviaDevice) -> None:
         super().__init__(hass.data[DOMAIN][entry_id][DEVICE_COORDINATOR])
-        self._hass = hass
         self._entry_id = entry_id
         self._device = device
         self._attr_device_info = build_device_info(device)
@@ -59,13 +58,13 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
         # State normally arrives via the websocket push within a second or two.
         # Follow up with an unthrottled poll (a plain async_request_refresh
         # would hit the interval throttle and re-serve cached state) so a dead
-        # push feed costs seconds, not a full poll interval.
-        self._hass.async_create_background_task(
-            self._poll_after_command(), f"harvia_command_poll_{self._device.id}"
+        # push feed costs seconds, not a full poll interval. Registered via
+        # async_on_remove so an entry unload/reload cancels it.
+        self.async_on_remove(
+            async_call_later(self.hass, _COMMAND_FALLBACK_DELAY, self._poll_after_command)
         )
 
-    async def _poll_after_command(self) -> None:
-        await asyncio.sleep(_COMMAND_FALLBACK_DELAY)
+    async def _poll_after_command(self, _now) -> None:
         await self.coordinator.async_force_refresh()
 
 

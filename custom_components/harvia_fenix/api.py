@@ -603,8 +603,13 @@ class HarviaSaunaAPI:
 
             errors = data.get("errors") if isinstance(data, dict) else None
             if errors:
-                if any("Unauthorized" in str(e.get("errorType", "")) for e in errors) and attempt == 0:
+                unauthorized = any(
+                    "Unauthorized" in str(e.get("errorType", "")) for e in errors
+                )
+                if unauthorized and attempt == 0:
                     continue
+                if unauthorized:
+                    raise HarviaAuthError(f"Unauthorized for GraphQL: {errors}")
                 raise RuntimeError(f"GraphQL errors: {errors}")
             return data
 

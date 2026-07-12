@@ -122,6 +122,11 @@ class HarviaWebsocket:
             idle_timeout = int(timeout_ms) / 1000 if timeout_ms else _DEFAULT_IDLE_TIMEOUT
 
             devices = (self._coordinator.data or {}).get("devices", [])
+            if not devices:
+                # Entering the receive loop with zero subscriptions would look
+                # healthy forever ('ka' keepalives reset the idle timeout), so
+                # bail out and let the backoff retry pick up the device list.
+                raise RuntimeError("no devices to subscribe to yet")
             for dev in devices:
                 await ws.send_json({
                     "id": str(uuid.uuid4()),

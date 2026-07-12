@@ -32,6 +32,7 @@ def _parse_interval(value: Any, default_label: str) -> int:
 
 
 FIXED_TICK_SECONDS = 30  # coordinator ticks every 30s; the real fetch is throttled below
+PUSH_FRESH_SECONDS = 30  # a push newer than this outranks an eventually-consistent shadow read
 
 
 class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -55,6 +56,7 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_device_refresh: float = 0.0
         self._devices: list[Any] = []
         self._states: dict[str, Any] = {}
+        self._last_push: dict[str, float] = {}
 
         _LOGGER.info(
             "Harvia device/state polling configured: tick=%ss device/state=%ss",
@@ -64,6 +66,7 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def apply_pushed_state(self, device_id: str, normalized: dict[str, Any]) -> None:
         """Merge a websocket-pushed device state and notify entities immediately."""
+        self._last_push[device_id] = time.monotonic()
         self._states[device_id] = normalized
         self.async_set_updated_data({"devices": self._devices, "states": self._states})
 
@@ -80,7 +83,16 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Harvia: refreshing devices/state (interval=%ss)", self._device_interval)
                 self._devices = await self.api.get_devices()
                 for dev in self._devices:
-                    self._states[dev.id] = await self.api.refresh_device_state(dev)
+                    # The REST shadow read is eventually consistent and can lag
+                    # a recent command by many seconds; a live push is always
+                    # newer, so never let a poll overwrite one.
+                    fetch_start = time.monotonic()
+                    if fetch_start - self._last_push.get(dev.id, float("-inf")) < PUSH_FRESH_SECONDS:
+                        continue
+                    state = await self.api.refresh_device_state(dev)
+                    if self._last_push.get(dev.id, float("-inf")) >= fetch_start:
+                        continue  # a push landed mid-fetch and is newer
+                    self._states[dev.id] = state
                 self._last_device_refresh = now
             else:
                 _LOGGER.debug("Harvia: skipping devices/state (cached)")

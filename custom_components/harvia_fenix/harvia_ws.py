@@ -27,6 +27,7 @@ _MAX_BACKOFF = 60          # cap between reconnect attempts (s)
 _ACK_TIMEOUT = 15          # wait this long for connection_ack (s)
 _HEARTBEAT = 30            # aiohttp ws ping interval — detects a dead peer (s)
 _STABLE_SECONDS = 30       # a connection that lasted this long resets the backoff
+_DEFAULT_IDLE_TIMEOUT = 300  # AppSync default connectionTimeoutMs, used if the ack omits it (s)
 
 
 class HarviaWebsocket:
@@ -112,6 +113,13 @@ class HarviaWebsocket:
             ack = await asyncio.wait_for(ws.receive_json(), timeout=_ACK_TIMEOUT)
             if ack.get("type") != "connection_ack":
                 raise RuntimeError(f"unexpected first frame: {ack}")
+            # AppSync promises traffic ('ka' keepalives) at least every
+            # connectionTimeoutMs. A subscription can die server-side while the
+            # socket still answers pings — the heartbeat above can't see that —
+            # so a silent gap longer than the promised window means the feed is
+            # dead and we must reconnect.
+            timeout_ms = (ack.get("payload") or {}).get("connectionTimeoutMs")
+            idle_timeout = int(timeout_ms) / 1000 if timeout_ms else _DEFAULT_IDLE_TIMEOUT
 
             devices = (self._coordinator.data or {}).get("devices", [])
             for dev in devices:
@@ -127,7 +135,20 @@ class HarviaWebsocket:
                 })
             _LOGGER.info("Harvia websocket subscribed to %d device(s)", len(devices))
 
-            async for msg in ws:
+            while True:
+                try:
+                    msg = await ws.receive(timeout=idle_timeout)
+                except TimeoutError:
+                    raise RuntimeError(
+                        f"no traffic for {idle_timeout:.0f}s; assuming dead subscription"
+                    ) from None
+                if msg.type in (
+                    aiohttp.WSMsgType.CLOSE,
+                    aiohttp.WSMsgType.CLOSING,
+                    aiohttp.WSMsgType.CLOSED,
+                    aiohttp.WSMsgType.ERROR,
+                ):
+                    break
                 if msg.type != aiohttp.WSMsgType.TEXT:
                     continue
                 data = json.loads(msg.data)

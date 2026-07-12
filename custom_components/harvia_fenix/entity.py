@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -15,6 +16,8 @@ from .device_info import build_device_info
 from ._helpers import coerce_bool
 
 _LOGGER = logging.getLogger(__name__)
+
+_COMMAND_FALLBACK_DELAY = 2.5  # give the websocket push this long before polling (s)
 
 
 class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
@@ -53,8 +56,17 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
                 "Harvia %s command error device=%s", self._command, self._device.id
             )
             raise
-        # State arrives via the websocket push; nudge the poll as a fallback.
-        await self.coordinator.async_request_refresh()
+        # State normally arrives via the websocket push within a second or two.
+        # Follow up with an unthrottled poll (a plain async_request_refresh
+        # would hit the interval throttle and re-serve cached state) so a dead
+        # push feed costs seconds, not a full poll interval.
+        self._hass.async_create_background_task(
+            self._poll_after_command(), f"harvia_command_poll_{self._device.id}"
+        )
+
+    async def _poll_after_command(self) -> None:
+        await asyncio.sleep(_COMMAND_FALLBACK_DELAY)
+        await self.coordinator.async_force_refresh()
 
 
 def make_onoff_setup(entity_cls: type[HarviaOnOffEntity]):

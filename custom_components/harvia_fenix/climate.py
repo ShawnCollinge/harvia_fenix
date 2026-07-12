@@ -20,6 +20,7 @@ from .coordinator import HarviaDeviceCoordinator, HarviaDataCoordinator
 from .api import HarviaDevice
 from .device_info import build_device_info
 from ._helpers import latest_data
+from .entity import HarviaFallbackPollMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ async def async_setup_entry(
     async_add_entities(HarviaClimate(hass, entry.entry_id, dev) for dev in devices)
 
 
-class HarviaClimate(CoordinatorEntity[HarviaDeviceCoordinator], ClimateEntity):
+class HarviaClimate(HarviaFallbackPollMixin, CoordinatorEntity[HarviaDeviceCoordinator], ClimateEntity):
     """Sauna as a thermostat: HEAT turns the sauna on, OFF turns it off.
 
     Target temperature and on/off come from the device coordinator (fed by the
@@ -156,7 +157,7 @@ class HarviaClimate(CoordinatorEntity[HarviaDeviceCoordinator], ClimateEntity):
                 self._device.id, temp,
             )
             raise
-        await self.coordinator.async_request_refresh()
+        self._schedule_fallback_poll()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         await self._async_set_heat(hvac_mode == HVACMode.HEAT)
@@ -173,4 +174,4 @@ class HarviaClimate(CoordinatorEntity[HarviaDeviceCoordinator], ClimateEntity):
         except Exception:
             _LOGGER.exception("Harvia CLIMATE SAUNA command error device=%s", self._device.id)
             raise
-        await self.coordinator.async_request_refresh()
+        self._schedule_fallback_poll()

@@ -56,11 +56,8 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
                 "Harvia %s command error device=%s", self._command, self._device.id
             )
             raise
-        # State normally arrives via the websocket push within a second or two.
-        # Follow up with an unthrottled poll (a plain async_request_refresh
-        # would hit the interval throttle and re-serve cached state) so a dead
-        # push feed costs seconds, not a full poll interval. One pending timer
-        # per entity: rapid commands coalesce, and removal cancels it.
+        # The push normally beats this; the delayed unthrottled poll covers a
+        # dead push feed. One pending timer per entity, cancelled on removal.
         if self._fallback_unsub:
             self._fallback_unsub()
         self._fallback_unsub = async_call_later(

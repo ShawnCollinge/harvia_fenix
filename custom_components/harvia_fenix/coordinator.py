@@ -68,9 +68,7 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Merge a websocket-pushed device state and notify entities immediately."""
         prev = self._states.get(device_id)
         if isinstance(prev, dict):
-            # If a push ever arrives as a partial document, absent keys
-            # normalize to None — keep the last known value rather than wipe
-            # every other entity to unknown.
+            # Partial push: keep last known values for keys the push lacks.
             normalized = {
                 k: (prev.get(k) if v is None else v) for k, v in normalized.items()
             }
@@ -91,9 +89,7 @@ class HarviaDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Harvia: refreshing devices/state (interval=%ss)", self._device_interval)
                 self._devices = await self.api.get_devices()
                 for dev in self._devices:
-                    # The REST shadow read is eventually consistent and can lag
-                    # a recent command by many seconds; a live push is always
-                    # newer, so never let a poll overwrite one.
+                    # The shadow read lags; never let a poll overwrite a recent push.
                     fetch_start = time.monotonic()
                     if fetch_start - self._last_push.get(dev.id, float("-inf")) < PUSH_FRESH_SECONDS:
                         continue

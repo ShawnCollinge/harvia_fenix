@@ -97,9 +97,7 @@ class HarviaWebsocket:
     async def _connect_once(self) -> None:
         devices = (self._coordinator.data or {}).get("devices", [])
         if not devices:
-            # Subscribing to nothing would look healthy forever ('ka' frames
-            # reset the idle timeout), so skip the dial entirely and let the
-            # backoff retry once the coordinator has devices.
+            # Zero subscriptions would idle "healthy" forever; retry via backoff.
             raise RuntimeError("no devices to subscribe to yet")
 
         host = self._api.graphql_device_host
@@ -120,11 +118,8 @@ class HarviaWebsocket:
             ack = await asyncio.wait_for(ws.receive_json(), timeout=_ACK_TIMEOUT)
             if ack.get("type") != "connection_ack":
                 raise RuntimeError(f"unexpected first frame: {ack}")
-            # AppSync promises traffic ('ka' keepalives) at least every
-            # connectionTimeoutMs. A subscription can die server-side while the
-            # socket still answers pings — the heartbeat above can't see that —
-            # so a silent gap longer than the promised window means the feed is
-            # dead and we must reconnect.
+            # AppSync guarantees a frame within connectionTimeoutMs; longer
+            # silence means a dead feed even while pings still answer.
             timeout_ms = (ack.get("payload") or {}).get("connectionTimeoutMs")
             idle_timeout = int(timeout_ms) / 1000 if timeout_ms else _DEFAULT_IDLE_TIMEOUT
 

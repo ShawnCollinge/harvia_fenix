@@ -20,7 +20,30 @@ _LOGGER = logging.getLogger(__name__)
 _COMMAND_FALLBACK_DELAY = 2.5  # give the websocket push this long before polling (s)
 
 
-class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
+class HarviaFallbackPollMixin:
+    """Post-command fallback: one unthrottled poll if the push doesn't beat it."""
+
+    _fallback_unsub: CALLBACK_TYPE | None = None
+
+    def _schedule_fallback_poll(self) -> None:
+        if self._fallback_unsub:
+            self._fallback_unsub()
+        self._fallback_unsub = async_call_later(
+            self.hass, _COMMAND_FALLBACK_DELAY, self._poll_after_command
+        )
+
+    async def _poll_after_command(self, _now) -> None:
+        self._fallback_unsub = None
+        await self.coordinator.async_force_refresh()
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._fallback_unsub:
+            self._fallback_unsub()
+            self._fallback_unsub = None
+        await super().async_will_remove_from_hass()
+
+
+class HarviaOnOffEntity(HarviaFallbackPollMixin, CoordinatorEntity[HarviaDeviceCoordinator]):
     """Base for Harvia on/off entities.
 
     State comes from the device coordinator, which is fed in real time by the
@@ -32,7 +55,6 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
 
     _command: str = ""
     _state_key: str = ""
-    _fallback_unsub: CALLBACK_TYPE | None = None
 
     def __init__(self, hass: HomeAssistant, entry_id: str, device: HarviaDevice) -> None:
         super().__init__(hass.data[DOMAIN][entry_id][DEVICE_COORDINATOR])
@@ -56,23 +78,7 @@ class HarviaOnOffEntity(CoordinatorEntity[HarviaDeviceCoordinator]):
                 "Harvia %s command error device=%s", self._command, self._device.id
             )
             raise
-        # The push normally beats this; the delayed unthrottled poll covers a
-        # dead push feed. One pending timer per entity, cancelled on removal.
-        if self._fallback_unsub:
-            self._fallback_unsub()
-        self._fallback_unsub = async_call_later(
-            self.hass, _COMMAND_FALLBACK_DELAY, self._poll_after_command
-        )
-
-    async def _poll_after_command(self, _now) -> None:
-        self._fallback_unsub = None
-        await self.coordinator.async_force_refresh()
-
-    async def async_will_remove_from_hass(self) -> None:
-        if self._fallback_unsub:
-            self._fallback_unsub()
-            self._fallback_unsub = None
-        await super().async_will_remove_from_hass()
+        self._schedule_fallback_poll()
 
 
 def make_onoff_setup(entity_cls: type[HarviaOnOffEntity]):
